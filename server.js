@@ -88,6 +88,28 @@ async function checkAbuseIPDB(ip) {
   } catch (e) { console.error('AbuseIPDB error:', e.message); return null; }
 }
 
+// ── GEOLOCALIZACION (ip-api.com, gratuito, sin key) ──────────────────────────
+const geoCache = new Map();
+
+async function checkGeoIP(ip) {
+  const cached = geoCache.get(ip);
+  if (cached && Date.now() - cached.ts < 86400000) return cached.data; // TTL 24h
+  try {
+    const r    = await fetch('http://ip-api.com/json/' + encodeURIComponent(ip) + '?fields=status,country,countryCode,city,lat,lon,query');
+    const json = await r.json();
+    if (json.status !== 'success') return null;
+    const result = {
+      country:     json.country,
+      countryCode: json.countryCode,
+      city:        json.city,
+      lat:         json.lat,
+      lon:         json.lon
+    };
+    geoCache.set(ip, { data: result, ts: Date.now() });
+    return result;
+  } catch (e) { console.error('GeoIP error:', e.message); return null; }
+}
+
 // ── TELEGRAM ──────────────────────────────────────────────────────────────────
 const tgCooldown = new Map();
 
@@ -130,11 +152,13 @@ async function processEvent(evt) {
   const alerts = evaluateEvent(evt, win5m);
   for (const a of alerts) {
     const abuse    = await checkAbuseIPDB(a.sourceIp);
+    const geo      = await checkGeoIP(a.sourceIp);
     const alertDoc = Object.assign({}, a, {
       timestamp: new Date().toISOString(),
       status:    'nuevo'
     });
     if (abuse) alertDoc.abuse = abuse;
+    if (geo)   alertDoc.geo   = geo;
     await alertsCol.add(alertDoc);
     console.log('[' + a.severity.toUpperCase() + '] ' + a.message + (abuse ? ' | AbuseIPDB: ' + abuse.score + '%' : ''));
     if ((a.severity || '').toLowerCase() === 'alta') await sendTelegramAlert(alertDoc);
@@ -312,6 +336,14 @@ app.get('/api/ip-check/:ip', async function(req, res) {
   try {
     const result = await checkAbuseIPDB(req.params.ip);
     if (!result) return res.status(503).json({ error: 'AbuseIPDB no disponible - configura ABUSEIPDB_KEY' });
+    res.json(result);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/geo-check/:ip', async function(req, res) {
+  try {
+    const result = await checkGeoIP(req.params.ip);
+    if (!result) return res.status(503).json({ error: 'Geolocalizacion no disponible para esta IP' });
     res.json(result);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

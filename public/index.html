@@ -161,6 +161,7 @@ footer{text-align:center;color:var(--mut);font-size:11px;margin-top:22px}
       <option value="30d">Últimos 30 días</option>
     </select>
     <button class="sec" onclick="downloadReport()">📄 Informe monitoreo</button>
+    <button class="sec" id="simBtn" onclick="simulateAttack()">⚡ Simular ataque</button>
     <div class="ml">
       <button class="pri" id="refreshBtn" onclick="loadData()">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 12a9 9 0 11-3-6.7M21 4v6h-6"/></svg>
@@ -189,6 +190,12 @@ footer{text-align:center;color:var(--mut);font-size:11px;margin-top:22px}
         <div class="chart-wrap"><canvas id="chartAlerts"></canvas></div>
       </div>
     </div>
+  </div>
+
+  <!-- Attack Map -->
+  <div class="panel">
+    <div class="ph">🌍 Mapa de Ataques</div>
+    <div id="attackMap" style="height:320px;border-radius:10px;overflow:hidden"></div>
   </div>
 
   <!-- IP Lookup -->
@@ -346,6 +353,8 @@ footer{text-align:center;color:var(--mut);font-size:11px;margin-top:22px}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/10.7.1/firebase-app-compat.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/10.7.1/firebase-auth-compat.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
 // ── FIREBASE AUTH — reemplaza con los valores de TU proyecto ────────────────
 // Firebase Console > Configuración del proyecto > Tus apps > Web app
@@ -395,7 +404,29 @@ auth.onAuthStateChanged(user=>{
 const API='';
 let alerts=[],events=[],risks=[],riskMap={};
 let hidden=false,step=1,editId=null,f={};
-let chartE=null,chartA=null;
+let chartE=null,chartA=null,attackMap=null,markersLayer=null;
+
+function initMap(){
+  if(attackMap) return;
+  attackMap=L.map('attackMap',{zoomControl:true,attributionControl:false}).setView([20,10],2);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:8,subdomains:'abcd'}).addTo(attackMap);
+  markersLayer=L.layerGroup().addTo(attackMap);
+}
+
+function plotAttackMap(al){
+  if(typeof L==='undefined') return;
+  initMap();
+  markersLayer.clearLayers();
+  const sevColor={alta:'#ef4444',media:'#f59e0b',baja:'#38bdf8'};
+  al.forEach(a=>{
+    if(!a.geo||!a.geo.lat||!a.geo.lon) return;
+    const c=sevColor[(a.severity||'baja').toLowerCase()]||'#38bdf8';
+    const m=L.circleMarker([a.geo.lat,a.geo.lon],{radius:7,color:c,fillColor:c,fillOpacity:.55,weight:1.5});
+    const abuseLine=a.abuse?('<br>AbuseIPDB: '+a.abuse.score+'%'):'';
+    m.bindPopup('<b>'+(a.sourceIp||'—')+'</b><br>'+(a.geo.city||'')+' '+(a.geo.country||'')+'<br>'+(a.rule||'')+abuseLine);
+    markersLayer.addLayer(m);
+  });
+}
 
 // ── TABS ──────────────────────────────────────────────────────────────────────
 function setTab(n){
@@ -557,6 +588,7 @@ async function loadData(){
     hidden=false;
     renderSummary(events,alerts);renderAlerts(alerts);renderEvents(events);
     if(typeof Chart!=='undefined'&&!stats.error)initCharts(stats);
+    plotAttackMap(alerts);
     document.getElementById('tsLbl').textContent='Actualizado: '+new Date().toLocaleTimeString('es-CL');
   }catch(e){
     document.getElementById('alertsBox').innerHTML=`<div class="err">Error: ${e.message}</div>`;
@@ -569,6 +601,24 @@ async function downloadReport(){
   const t=await authToken();
   const a=document.createElement('a');a.href=`${API}/api/reports/generate?range=${r}&token=${encodeURIComponent(t)}`;a.setAttribute('download','');
   document.body.appendChild(a);a.click();document.body.removeChild(a);
+}
+
+async function simulateAttack(){
+  const btn=document.getElementById('simBtn');
+  btn.disabled=true;btn.textContent='Simulando...';
+  try{
+    const h=await authHeaders();
+    const res=await fetch(`${API}/api/events/simulate`,{method:'POST',headers:h});
+    const data=await res.json();
+    if(!res.ok) throw new Error(data.error||'Error en la simulación');
+    btn.textContent=`✓ ${data.alertsGenerated} alerta(s) generada(s)`;
+    await loadData();
+  }catch(e){
+    btn.textContent='Error';
+    alert('Error al simular: '+e.message);
+  }finally{
+    setTimeout(()=>{btn.disabled=false;btn.textContent='⚡ Simular ataque';},2500);
+  }
 }
 
 // ── RISKS ─────────────────────────────────────────────────────────────────────
