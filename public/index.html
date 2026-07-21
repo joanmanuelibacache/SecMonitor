@@ -172,6 +172,8 @@ footer{text-align:center;color:var(--mut);font-size:11px;margin-top:22px}
       <option value="30d">Últimos 30 días</option>
     </select>
     <button class="sec" onclick="downloadReport()">📄 Informe monitoreo</button>
+    <button class="sec" onclick="downloadEventsCSV()">⬇️ Eventos CSV</button>
+    <button class="sec" onclick="downloadAlertsCSV()">⬇️ Alertas CSV</button>
     <button class="sec" id="simBtn" onclick="simulateAttack()">⚡ Simular ataque</button>
     <button class="critbtn" id="chainBtn" onclick="simulateChain()">🔗 Simular Kill Chain</button>
     <div class="ml">
@@ -582,6 +584,20 @@ async function downloadReport(){
   const r=document.getElementById('reportRange').value;
   const t=await authToken();
   const a=document.createElement('a');a.href=`${API}/api/reports/generate?range=${r}&token=${encodeURIComponent(t)}`;a.setAttribute('download','');
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+}
+
+async function downloadEventsCSV(){
+  const r=document.getElementById('reportRange').value;
+  const t=await authToken();
+  const a=document.createElement('a');a.href=`${API}/api/export/events?range=${r}&token=${encodeURIComponent(t)}`;a.setAttribute('download','');
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+}
+
+async function downloadAlertsCSV(){
+  const r=document.getElementById('reportRange').value;
+  const t=await authToken();
+  const a=document.createElement('a');a.href=`${API}/api/export/alerts?range=${r}&token=${encodeURIComponent(t)}`;a.setAttribute('download','');
   document.body.appendChild(a);a.click();document.body.removeChild(a);
 }
 

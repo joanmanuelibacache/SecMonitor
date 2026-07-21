@@ -46,6 +46,20 @@ function hmColor(p, i) {
   return '#fecaca';
 }
 
+// ── EXPORTACION CSV ───────────────────────────────────────────────────────────
+function csvEscape(v) {
+  if (v === null || v === undefined) return '';
+  const s = String(v);
+  if (/[",\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+  return s;
+}
+
+function toCSV(headers, rows) {
+  const lines = [headers.join(',')];
+  rows.forEach(function(r) { lines.push(r.map(csvEscape).join(',')); });
+  return lines.join('\r\n');
+}
+
 // ── AUTH MIDDLEWARE ───────────────────────────────────────────────────────────
 async function requireAuth(req, res, next) {
   try {
@@ -425,6 +439,46 @@ app.get('/api/geo-check/:ip', async function(req, res) {
     const result = await checkGeoIP(req.params.ip);
     if (!result) return res.status(503).json({ error: 'Geolocalizacion no disponible para esta IP' });
     res.json(result);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/export/events', async function(req, res) {
+  try {
+    const range = req.query.range || '7d';
+    const days  = { '1d': 1, '7d': 7, '30d': 30, 'all': 36500 }[range] || 7;
+    const since = new Date(Date.now() - days * 86400000).toISOString();
+    const snap  = await eventsCol.where('timestamp', '>=', since).orderBy('timestamp', 'desc').get();
+    const rows  = snap.docs.map(function(d) {
+      const e = d.data();
+      return [e.id, e.type, e.sourceIp, e.port, e.user, e.country, e.timestamp];
+    });
+    const csv = toCSV(['id', 'type', 'sourceIp', 'port', 'user', 'country', 'timestamp'], rows);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="secmonitor-eventos-' + new Date().toISOString().slice(0, 10) + '.csv"');
+    res.send('\uFEFF' + csv);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/export/alerts', async function(req, res) {
+  try {
+    const range = req.query.range || '7d';
+    const days  = { '1d': 1, '7d': 7, '30d': 30, 'all': 36500 }[range] || 7;
+    const since = new Date(Date.now() - days * 86400000).toISOString();
+    const snap  = await alertsCol.where('timestamp', '>=', since).orderBy('timestamp', 'desc').get();
+    const rows  = snap.docs.map(function(d) {
+      const a = d.data();
+      return [
+        d.id, a.rule, a.severity, a.message, a.sourceIp,
+        a.mitre ? a.mitre.id : '', a.mitre ? a.mitre.name : '',
+        a.abuse ? a.abuse.score : '', a.abuse ? a.abuse.country : '',
+        a.geo ? a.geo.city : '', a.geo ? a.geo.country : '',
+        a.status, a.timestamp
+      ];
+    });
+    const csv = toCSV(['id', 'rule', 'severity', 'message', 'sourceIp', 'mitreId', 'mitreName', 'abuseScore', 'abuseCountry', 'geoCity', 'geoCountry', 'status', 'timestamp'], rows);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="secmonitor-alertas-' + new Date().toISOString().slice(0, 10) + '.csv"');
+    res.send('\uFEFF' + csv);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
