@@ -1,5 +1,5 @@
 /**
- * SecuMonitor - server.js
+ * SecMonitor - server.js
  * npm install express firebase-admin cors pdfkit dotenv
  */
 
@@ -47,9 +47,6 @@ function hmColor(p, i) {
 }
 
 // ── AUTH MIDDLEWARE ───────────────────────────────────────────────────────────
-// Acepta el token via header "Authorization: Bearer <idToken>" (fetch normal)
-// o via query "?token=<idToken>" (necesario para descargas de PDF, que son
-// navegaciones directas del navegador sin headers custom).
 async function requireAuth(req, res, next) {
   try {
     const header = req.headers.authorization || '';
@@ -93,7 +90,7 @@ const geoCache = new Map();
 
 async function checkGeoIP(ip) {
   const cached = geoCache.get(ip);
-  if (cached && Date.now() - cached.ts < 86400000) return cached.data; // TTL 24h
+  if (cached && Date.now() - cached.ts < 86400000) return cached.data;
   try {
     const r    = await fetch('http://ip-api.com/json/' + encodeURIComponent(ip) + '?fields=status,country,countryCode,city,lat,lon,query');
     const json = await r.json();
@@ -127,7 +124,7 @@ async function sendTelegramAlert(a) {
   const abLine = ab ? ('\nAbuseIPDB: ' + ab.score + '% | ' + (ab.country || 'N/A') + (ab.isTor ? ' | TOR' : '')) : '';
 
   const msg =
-    '<b>ALERTA ALTA - SecuMonitor</b>\n' +
+    '<b>' + (a.severity === 'critica' ? 'INCIDENTE CRITICO' : 'ALERTA ALTA') + ' - SecMonitor</b>\n' +
     '<b>Regla:</b> <code>' + (a.rule || 'N/A') + '</code>\n' +
     '<b>Detalle:</b> ' + (a.message || 'N/A') + '\n' +
     '<b>IP:</b> <code>' + (a.sourceIp || 'N/A') + '</code>' + abLine + '\n' +
@@ -145,11 +142,64 @@ async function sendTelegramAlert(a) {
   } catch (err) { console.error('Telegram fetch error:', err.message); }
 }
 
+// ── CORRELACION MULTI-EVENTO (KILL CHAIN DETECTION) ──────────────────────────
+const CHAIN_WINDOW_MS = 30 * 60 * 1000; // 30 min
+const chainWindow = new Map(); // ip -> { stages: Map(stageName -> {rule,label,timestamp}), lastAlert }
+
+const STAGE_MAP = {
+  escaneo_puertos:      { stage: 'reconnaissance',   label: 'Reconocimiento (escaneo de puertos)' },
+  fuerza_bruta:         { stage: 'credential_access', label: 'Acceso a Credenciales (fuerza bruta)' },
+  multiples_paises:     { stage: 'initial_access',    label: 'Acceso Inicial (multiples paises)' },
+  acceso_fuera_horario: { stage: 'defense_evasion',   label: 'Evasion de Defensas (acceso fuera de horario)' }
+};
+
+function pruneChain(entry) {
+  const cutoff = Date.now() - CHAIN_WINDOW_MS;
+  for (const k of Array.from(entry.stages.keys())) {
+    if (entry.stages.get(k).timestamp < cutoff) entry.stages.delete(k);
+  }
+}
+
+function updateChainAndCheck(ip, stageName, info) {
+  let entry = chainWindow.get(ip);
+  if (!entry) { entry = { stages: new Map(), lastAlert: 0 }; chainWindow.set(ip, entry); }
+  pruneChain(entry);
+  entry.stages.set(stageName, Object.assign({}, info, { timestamp: Date.now() }));
+
+  if (entry.stages.size >= 2 && (Date.now() - entry.lastAlert) > CHAIN_WINDOW_MS) {
+    entry.lastAlert = Date.now();
+    return Array.from(entry.stages.values()).sort(function(a, b) { return a.timestamp - b.timestamp; });
+  }
+  return null;
+}
+
+async function raiseKillChainAlert(ip, chain) {
+  const stagesLabel = chain.map(function(s) { return s.label; }).join(' -> ');
+  const abuse = await checkAbuseIPDB(ip);
+  const geo   = await checkGeoIP(ip);
+  const chainAlert = {
+    rule:      'kill_chain',
+    severity:  'critica',
+    message:   'Secuencia de ataque detectada: ' + stagesLabel,
+    sourceIp:  ip,
+    timestamp: new Date().toISOString(),
+    status:    'nuevo',
+    mitre:     { id: 'Kill Chain', name: stagesLabel, tactic: 'Multiples Tacticas (correlacionado)' },
+    chain:     chain
+  };
+  if (abuse) chainAlert.abuse = abuse;
+  if (geo)   chainAlert.geo   = geo;
+  await alertsCol.add(chainAlert);
+  console.log('KILL CHAIN DETECTADO -> ' + ip + ' : ' + stagesLabel);
+  await sendTelegramAlert(chainAlert);
+}
+
 // ── PROCESS EVENT ─────────────────────────────────────────────────────────────
 async function processEvent(evt) {
   await eventsCol.doc(evt.id).set(evt);
   win5m.add(evt);
   const alerts = evaluateEvent(evt, win5m);
+
   for (const a of alerts) {
     const abuse    = await checkAbuseIPDB(a.sourceIp);
     const geo      = await checkGeoIP(a.sourceIp);
@@ -162,7 +212,23 @@ async function processEvent(evt) {
     await alertsCol.add(alertDoc);
     console.log('[' + a.severity.toUpperCase() + '] ' + a.message + (abuse ? ' | AbuseIPDB: ' + abuse.score + '%' : ''));
     if ((a.severity || '').toLowerCase() === 'alta') await sendTelegramAlert(alertDoc);
+
+    const stageInfo = STAGE_MAP[a.rule];
+    if (stageInfo) {
+      const chain = updateChainAndCheck(a.sourceIp, stageInfo.stage, { rule: a.rule, label: stageInfo.label });
+      if (chain) await raiseKillChainAlert(a.sourceIp, chain);
+    }
   }
+
+  // Senal adicional: login exitoso desde una IP que ya disparo fuerza bruta antes -> muy probable cuenta comprometida
+  if (evt.type === 'login_success') {
+    const entry = chainWindow.get(evt.sourceIp);
+    if (entry && entry.stages.has('credential_access')) {
+      const chain = updateChainAndCheck(evt.sourceIp, 'initial_access', { rule: 'login_success', label: 'Acceso Inicial (login exitoso tras fuerza bruta)' });
+      if (chain) await raiseKillChainAlert(evt.sourceIp, chain);
+    }
+  }
+
   return alerts;
 }
 
@@ -171,7 +237,8 @@ const C = {
   bg: '#0d1b2a', navy: '#1b2838', accent: '#00b4d8', accent2: '#3b82f6',
   white: '#ffffff', light: '#f0f4f8', border: '#dde3ea',
   text: '#1a1a2e', muted: '#6b7280', dim: '#4a6580',
-  alta: '#ef4444', media: '#f59e0b', baja: '#3b82f6', ok: '#22c55e', purple: '#6366f1'
+  critica: '#dc2626', alta: '#ef4444', media: '#f59e0b', baja: '#3b82f6',
+  ok: '#22c55e', purple: '#6366f1'
 };
 
 function PW(doc) { return doc.page.width; }
@@ -182,7 +249,7 @@ function cover(doc, title, period, date) {
   doc.rect(0, 0, PW(doc), 5).fill(C.accent);
   for (let i = 0; i < 6; i++) doc.rect(0, 210 + i * 6, PW(doc), 0.8).fill('#0d2035');
   doc.fontSize(8).fillColor(C.accent).font('Helvetica').text('SISTEMA DE MONITOREO DE SEGURIDAD', 0, PH(doc) * 0.30, { align: 'center', width: PW(doc) });
-  doc.fontSize(30).fillColor(C.white).font('Helvetica-Bold').text('SecuMonitor', 0, PH(doc) * 0.35, { align: 'center', width: PW(doc) });
+  doc.fontSize(30).fillColor(C.white).font('Helvetica-Bold').text('SecMonitor', 0, PH(doc) * 0.35, { align: 'center', width: PW(doc) });
   doc.rect(PW(doc) / 2 - 50, PH(doc) * 0.435, 100, 2).fill(C.accent);
   doc.fontSize(16).fillColor(C.accent).font('Helvetica').text(title, 0, PH(doc) * 0.46, { align: 'center', width: PW(doc) });
   if (period) doc.fontSize(10).fillColor('#8ba3c1').text(period, 0, PH(doc) * 0.53, { align: 'center', width: PW(doc) });
@@ -194,7 +261,7 @@ function cover(doc, title, period, date) {
 function pageHeader(doc, sub) {
   doc.rect(0, 0, PW(doc), 47).fill(C.bg);
   doc.rect(0, 47, PW(doc), 3).fill(C.accent);
-  doc.fontSize(13).fillColor(C.white).font('Helvetica-Bold').text('SECUMONITOR', 28, 14);
+  doc.fontSize(13).fillColor(C.white).font('Helvetica-Bold').text('SECMONITOR', 28, 14);
   if (sub) doc.fontSize(8).fillColor(C.accent).font('Helvetica').text('  >  ' + sub.toUpperCase(), 120, 18);
   doc.fontSize(8).fillColor(C.muted).text(new Date().toLocaleDateString('es-CL'), 0, 19, { align: 'right', width: PW(doc) - 28 });
   doc.y = 64;
@@ -203,7 +270,7 @@ function pageHeader(doc, sub) {
 function pageFooter(doc, n) {
   doc.rect(0, PH(doc) - 28, PW(doc), 28).fill(C.bg);
   doc.rect(0, PH(doc) - 31, PW(doc), 3).fill(C.accent2);
-  doc.fontSize(7).fillColor(C.dim).font('Helvetica').text('SECUMONITOR - INFORME CONFIDENCIAL', 28, PH(doc) - 17);
+  doc.fontSize(7).fillColor(C.dim).font('Helvetica').text('SECMONITOR - INFORME CONFIDENCIAL', 28, PH(doc) - 17);
   doc.fillColor(C.accent).text('PAG. ' + n, 0, PH(doc) - 17, { align: 'right', width: PW(doc) - 28 });
 }
 
@@ -227,8 +294,8 @@ function statBoxes(doc, items) {
     const x = 28 + i * (bW + gap);
     doc.rect(x, bY, bW, bH).fill(C.light);
     doc.rect(x, bY, 4, bH).fill(item.color || C.accent);
-    doc.fontSize(8).fillColor(C.muted).font('Helvetica').text(item.label.toUpperCase(), x + 10, bY + 10, { width: bW - 14 });
-    doc.fontSize(22).fillColor(C.text).font('Helvetica-Bold').text(String(item.value), x + 10, bY + 24, { width: bW - 14 });
+    doc.fontSize(7.5).fillColor(C.muted).font('Helvetica').text(item.label.toUpperCase(), x + 8, bY + 10, { width: bW - 12 });
+    doc.fontSize(20).fillColor(C.text).font('Helvetica-Bold').text(String(item.value), x + 8, bY + 24, { width: bW - 12 });
     doc.font('Helvetica');
   });
   doc.y = bY + bH + 16;
@@ -295,7 +362,6 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
 
-// ── ROUTES ────────────────────────────────────────────────────────────────────
 app.get('/api/health', function(req, res) { res.json({ status: 'ok', ts: new Date().toISOString() }); });
 
 // Todo lo que sigue requiere sesion valida de Firebase Auth
@@ -315,6 +381,20 @@ app.post('/api/events/simulate', async function(req, res) {
     let total = 0;
     for (const e of evts) total += (await processEvent(e)).length;
     res.json({ eventsGenerated: evts.length, alertsGenerated: total });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/events/simulate-chain', async function(req, res) {
+  try {
+    const ip = req.body.ip || '203.0.113.45';
+    let total = 0;
+    total += (await processEvent(Object.assign({ id: 'evt_' + Date.now() + '_a', type: 'port_scan', sourceIp: ip, port: 1000, user: null, timestamp: new Date().toISOString(), country: 'RU' }))).length;
+    const scan = generatePortScanBurst(ip, 12);
+    for (const e of scan) total += (await processEvent(e)).length;
+    const brute = generateBruteForceBurst(ip, 6);
+    for (const e of brute) total += (await processEvent(e)).length;
+    total += (await processEvent({ id: 'evt_' + Date.now() + '_login', type: 'login_success', sourceIp: ip, port: 22, user: 'admin', country: 'RU', timestamp: new Date().toISOString() })).length;
+    res.json({ ok: true, ip: ip, alertsGenerated: total });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -350,7 +430,7 @@ app.get('/api/geo-check/:ip', async function(req, res) {
 
 app.post('/api/telegram/test', async function(req, res) {
   try {
-    await sendTelegramAlert({ rule: 'test', message: 'Mensaje de prueba desde SecuMonitor. Todo funciona correctamente.', sourceIp: '127.0.0.1', severity: 'alta', timestamp: new Date().toISOString() });
+    await sendTelegramAlert({ rule: 'test', message: 'Mensaje de prueba desde SecMonitor. Todo funciona correctamente.', sourceIp: '127.0.0.1', severity: 'alta', timestamp: new Date().toISOString() });
     res.json({ ok: true, message: 'Mensaje enviado - revisa tu bot de Telegram' });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -361,15 +441,15 @@ app.get('/api/stats', async function(req, res) {
     const as = await alertsCol.where('timestamp', '>=', new Date(Date.now() - 604800000).toISOString()).get();
     const evtHr = Array(24).fill(0);
     es.docs.forEach(function(d) { const h = Math.floor((Date.now() - new Date(d.data().timestamp)) / 3600000); if (h < 24) evtHr[23 - h]++; });
-    const alta = Array(7).fill(0), media = Array(7).fill(0), baja = Array(7).fill(0), lbls = [];
+    const critica = Array(7).fill(0), alta = Array(7).fill(0), media = Array(7).fill(0), baja = Array(7).fill(0), lbls = [];
     for (let i = 6; i >= 0; i--) lbls.push(new Date(Date.now() - i * 86400000).toLocaleDateString('es-CL', { weekday: 'short', day: 'numeric' }));
     as.docs.forEach(function(d) {
       const data = d.data(), di = Math.floor((Date.now() - new Date(data.timestamp)) / 86400000);
-      if (di < 7) { const idx = 6 - di, s = (data.severity || 'baja').toLowerCase(); if (s === 'alta') alta[idx]++; else if (s === 'media') media[idx]++; else baja[idx]++; }
+      if (di < 7) { const idx = 6 - di, s = (data.severity || 'baja').toLowerCase(); if (s === 'critica') critica[idx]++; else if (s === 'alta') alta[idx]++; else if (s === 'media') media[idx]++; else baja[idx]++; }
     });
     const hourLabels = [];
     for (let j = 0; j < 24; j++) hourLabels.push(new Date(Date.now() - (23 - j) * 3600000).getHours() + ':00');
-    res.json({ eventsByHour: { labels: hourLabels, data: evtHr }, alertsByDay: { labels: lbls, alta: alta, media: media, baja: baja } });
+    res.json({ eventsByHour: { labels: hourLabels, data: evtHr }, alertsByDay: { labels: lbls, critica: critica, alta: alta, media: media, baja: baja } });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -415,17 +495,18 @@ app.get('/api/reports/generate', async function(req, res) {
     const aS    = await alertsCol.where('timestamp', '>=', since).get();
     const events = eS.docs.map(function(d) { return d.data(); });
     const alerts = aS.docs.map(function(d) { return d.data(); });
-    const cnt = { alta: 0, media: 0, baja: 0 }, ips = {};
+    const cnt = { critica: 0, alta: 0, media: 0, baja: 0 }, ips = {};
     alerts.forEach(function(a) {
       const s = (a.severity || 'baja').toLowerCase();
       if (cnt[s] !== undefined) cnt[s]++;
       if (a.sourceIp) ips[a.sourceIp] = (ips[a.sourceIp] || 0) + 1;
     });
-    const topIps = Object.entries(ips).sort(function(a, b) { return b[1] - a[1]; }).slice(0, 8);
-    const altas  = alerts.filter(function(a) { return (a.severity || '').toLowerCase() === 'alta'; });
+    const topIps   = Object.entries(ips).sort(function(a, b) { return b[1] - a[1]; }).slice(0, 8);
+    const criticas = alerts.filter(function(a) { return (a.severity || '').toLowerCase() === 'critica'; });
+    const altas    = alerts.filter(function(a) { return (a.severity || '').toLowerCase() === 'alta'; });
 
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', 'attachment; filename="secumonitor-monitoreo-' + new Date().toISOString().slice(0, 10) + '.pdf"');
+    res.setHeader('Content-Disposition', 'attachment; filename="secmonitor-monitoreo-' + new Date().toISOString().slice(0, 10) + '.pdf"');
     const doc = new PDF({ margin: 0, size: 'A4' });
     doc.pipe(res);
     const pg = { n: 0 };
@@ -437,9 +518,17 @@ app.get('/api/reports/generate', async function(req, res) {
     statBoxes(doc, [
       { label: 'Eventos Totales', value: events.length, color: C.accent2 },
       { label: 'Alertas Totales', value: alerts.length, color: C.purple  },
+      { label: 'Kill Chain',      value: cnt.critica,   color: C.critica },
       { label: 'Severidad Alta',  value: cnt.alta,      color: C.alta    },
       { label: 'Severidad Media', value: cnt.media,     color: C.media   }
     ]);
+
+    if (criticas.length) {
+      sectionTitle(doc, 'Incidentes de Kill Chain (Correlacion Multi-Evento)');
+      drawTable(doc, ['IP Origen', 'Secuencia Detectada', 'Fecha'],
+        criticas.map(function(a) { return [a.sourceIp || 'N/A', (a.message || '').replace('Secuencia de ataque detectada: ', ''), new Date(a.timestamp).toLocaleString('es-CL')]; }),
+        [90, 335, 110], pg, 'Monitoreo de Seguridad');
+    }
 
     if (topIps.length) {
       sectionTitle(doc, 'Top IPs Sospechosas');
@@ -478,7 +567,7 @@ app.get('/api/reports/risks', async function(req, res) {
     risks.forEach(function(r) { if (lvlC[r.level] !== undefined) lvlC[r.level]++; });
 
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', 'attachment; filename="secumonitor-riesgos-' + new Date().toISOString().slice(0, 10) + '.pdf"');
+    res.setHeader('Content-Disposition', 'attachment; filename="secmonitor-riesgos-' + new Date().toISOString().slice(0, 10) + '.pdf"');
     const doc = new PDF({ margin: 0, size: 'A4' });
     doc.pipe(res);
     const pg = { n: 0 };
@@ -531,4 +620,4 @@ app.get('/api/reports/risks', async function(req, res) {
 
 // ── START ─────────────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, function() { console.log('SecuMonitor corriendo en http://localhost:' + PORT); });
+app.listen(PORT, function() { console.log('SecMonitor corriendo en http://localhost:' + PORT); });

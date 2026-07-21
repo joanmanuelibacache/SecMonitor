@@ -2,16 +2,16 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>SecuMonitor</title>
+<title>SecMonitor</title>
 <style>
-:root{--bg:#0b0f1a;--pan:#121826;--bdr:#1f2940;--txt:#e6ebf5;--mut:#8b95ab;--acc:#3b82f6;--alta:#ef4444;--med:#f59e0b;--baj:#38bdf8;--ok:#22c55e;--org:#f97316}
+:root{--bg:#0b0f1a;--pan:#121826;--bdr:#1f2940;--txt:#e6ebf5;--mut:#8b95ab;--acc:#3b82f6;--crit:#dc2626;--alta:#ef4444;--med:#f59e0b;--baj:#38bdf8;--ok:#22c55e;--org:#f97316}
 *{box-sizing:border-box;margin:0}
 body{font-family:'Segoe UI',system-ui,sans-serif;background:radial-gradient(circle at top left,#131c30,var(--bg) 60%);color:var(--txt);min-height:100vh;padding:18px;line-height:1.5}
 .hdr{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px}
 .brand h1{font-size:21px;display:flex;align-items:center;gap:9px}
 .brand p{color:var(--mut);font-size:12px;margin-top:2px}
 .dot{width:9px;height:9px;border-radius:50%;background:var(--ok);animation:pulse 2s infinite}
-@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(34,197,94,.5)}70%{box-shadow:0 0 0 8px rgba(34,197,94,0)}100%{box-shadow:0 0 0 0 rgba(34,197,94,0)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 .nav{display:flex;gap:3px;background:var(--pan);border:1px solid var(--bdr);border-radius:10px;padding:3px;width:fit-content;margin-bottom:18px}
 .tab{padding:7px 18px;border-radius:7px;border:none;background:none;color:var(--mut);font-size:13px;font-weight:500;cursor:pointer;transition:all .2s}
 .tab.on{background:var(--acc);color:#fff}
@@ -19,27 +19,28 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:radial-gradient(circ
 .panel{background:var(--pan);border:1px solid var(--bdr);border-radius:14px;padding:18px;margin-bottom:16px}
 .ph{margin:0 0 12px;font-size:14px;display:flex;align-items:center;gap:8px}
 .ph .ct{background:var(--bdr);color:var(--mut);font-size:11px;padding:2px 8px;border-radius:999px}
-.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:16px}
 .card{background:var(--pan);border:1px solid var(--bdr);border-radius:14px;padding:15px 16px;position:relative;overflow:hidden}
 .card .lbl{color:var(--mut);font-size:11px;text-transform:uppercase;letter-spacing:.5px}
 .card .val{font-size:28px;font-weight:700;margin-top:4px}
 .card .bar{position:absolute;bottom:0;left:0;height:3px;width:100%;background:var(--acc)}
+.ccrit .val{color:var(--crit)}.ccrit .bar{background:var(--crit);animation:critbar 1.6s infinite}
+@keyframes critbar{0%,100%{opacity:1}50%{opacity:.35}}
 .ca .val{color:var(--alta)}.ca .bar{background:var(--alta)}
 .cm .val{color:var(--med)}.cm .bar{background:var(--med)}
 .cb .val{color:var(--baj)}.cb .bar{background:var(--baj)}
-/* Charts */
-.chart-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
-.chart-lbl{font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px}
-.chart-wrap{position:relative;height:160px}
-/* Tables */
 table{width:100%;border-collapse:collapse;font-size:13px}
 th{text-align:left;color:var(--mut);font-size:11px;text-transform:uppercase;letter-spacing:.5px;padding:7px 9px;border-bottom:1px solid var(--bdr)}
 td{padding:8px 9px;border-bottom:1px solid rgba(255,255,255,.03)}
 tr:last-child td{border-bottom:none}
 tr:hover td{background:rgba(255,255,255,.02)}
+tr.chain-row td{background:rgba(220,38,38,.08)}
+tr.chain-row:hover td{background:rgba(220,38,38,.14)}
 .mono{font-family:Consolas,monospace;color:var(--mut);font-size:12px}
 .s12{font-size:12px}
 .badge{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:700;text-transform:uppercase}
+.badge.critica{background:rgba(220,38,38,.25);color:#fca5a5;animation:critpulse 1.6s infinite}
+@keyframes critpulse{0%,100%{opacity:1}50%{opacity:.55}}
 .badge.alta,.badge.critico{background:rgba(239,68,68,.15);color:var(--alta)}
 .badge.media,.badge.medio{background:rgba(245,158,11,.15);color:var(--med)}
 .badge.baja,.badge.bajo{background:rgba(56,189,248,.15);color:var(--baj)}
@@ -47,11 +48,14 @@ tr:hover td{background:rgba(255,255,255,.02)}
 .badge.pendiente{background:rgba(139,149,171,.15);color:var(--mut)}
 .badge.en_progreso{background:rgba(59,130,246,.15);color:var(--acc)}
 .badge.mitigado{background:rgba(34,197,94,.15);color:var(--ok)}
+.chain-list{font-size:11px;color:var(--mut);margin-top:2px}
+.mitre-tag{display:inline-block;background:rgba(99,102,241,.15);color:#a5a8f5;font-size:10px;padding:2px 7px;border-radius:5px;font-weight:600;margin-top:2px}
 button{border:none;padding:8px 14px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;display:inline-flex;align-items:center;gap:6px;transition:transform .1s,background .15s;font-family:inherit}
 button:hover{transform:translateY(-1px)}button:active{transform:none}button:disabled{opacity:.55;cursor:default;transform:none}
 .pri{background:var(--acc);color:#fff}.pri:hover{background:#2563eb}
 .sec{background:#1e2840;color:var(--txt)}.sec:hover{background:#28365a}
 .danger{background:rgba(239,68,68,.15);color:var(--alta)}.danger:hover{background:rgba(239,68,68,.25)}
+.critbtn{background:rgba(220,38,38,.2);color:#fca5a5}.critbtn:hover{background:rgba(220,38,38,.32)}
 .sm{padding:5px 10px;font-size:12px}
 .spin svg{animation:sp .8s linear infinite}
 @keyframes sp{to{transform:rotate(360deg)}}
@@ -63,7 +67,19 @@ select{background:var(--pan);border:1px solid var(--bdr);color:var(--txt);paddin
 .err{color:var(--alta)}
 .sk{background:linear-gradient(90deg,var(--bdr) 25%,#283149 50%,var(--bdr) 75%);background-size:200%;animation:sh 1.4s infinite;border-radius:6px;height:14px}
 @keyframes sh{0%{background-position:200% 0}100%{background-position:-200% 0}}
-/* Risk view */
+.chart-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
+.chart-lbl{font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px}
+.chart-wrap{position:relative;height:160px}
+.ab{display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700}
+.ab-safe{background:rgba(34,197,94,.15);color:var(--ok)}
+.ab-warn{background:rgba(245,158,11,.15);color:var(--med)}
+.ab-danger{background:rgba(239,68,68,.15);color:var(--alta)}
+.ab-na{background:rgba(139,149,171,.1);color:var(--mut)}
+.ip-result{background:var(--bg);border:1px solid var(--bdr);border-radius:10px;padding:14px;margin-top:12px;display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
+.ip-field .lf{font-size:10px;color:var(--mut);text-transform:uppercase;letter-spacing:.5px}
+.ip-field .lv{font-size:14px;font-weight:600;margin-top:3px}
+.ip-input{background:var(--bg);border:1px solid var(--bdr);color:var(--txt);padding:8px 12px;border-radius:8px;font-size:13px;font-family:inherit;width:220px}
+.ip-input:focus{outline:none;border-color:var(--acc)}
 .rhdr{display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;margin-bottom:16px}
 .rhdr h2{font-size:20px}.rhdr p{color:var(--mut);font-size:12px;margin-top:3px}
 .hm-wrap{display:flex;gap:5px;align-items:flex-start;overflow-x:auto}
@@ -81,7 +97,6 @@ select{background:var(--pan);border:1px solid var(--bdr);color:var(--txt);paddin
 .hm-sw{width:12px;height:12px;border-radius:3px;flex:0 0 auto}
 .rdot{width:20px;height:20px;border-radius:50%;background:rgba(255,255,255,.9);color:#111;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:0 0 auto;cursor:pointer}
 .rdot:hover{background:var(--acc);color:#fff}
-/* Modal */
 .ovl{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:100;display:flex;align-items:center;justify-content:center;padding:14px}
 .modal{background:var(--pan);border:1px solid var(--bdr);border-radius:16px;width:560px;max-width:100%;max-height:90vh;display:flex;flex-direction:column;overflow:hidden}
 .mhdr{padding:16px 20px 0;display:flex;justify-content:space-between;align-items:center;flex:0 0 auto}
@@ -107,7 +122,6 @@ select{background:var(--pan);border:1px solid var(--bdr);color:var(--txt);paddin
 .snum.bajo{color:var(--ok)}.snum.medio{color:var(--med)}.snum.alto{color:var(--org)}.snum.critico{color:var(--alta)}
 .slbl{font-weight:600;font-size:15px}.ssub{font-size:12px;color:var(--mut);margin-top:2px}.sred{font-size:12px;color:var(--ok);margin-top:2px}
 footer{text-align:center;color:var(--mut);font-size:11px;margin-top:22px}
-/* Login */
 .login-wrap{min-height:80vh;display:flex;align-items:center;justify-content:center}
 .login-box{background:var(--pan);border:1px solid var(--bdr);border-radius:16px;padding:34px 30px;width:320px;text-align:center}
 .login-box h1{font-size:19px;margin-bottom:4px;display:flex;align-items:center;justify-content:center;gap:8px}
@@ -116,16 +130,14 @@ footer{text-align:center;color:var(--mut);font-size:11px;margin-top:22px}
 .login-box input:focus{outline:none;border-color:var(--acc)}
 .login-box button{width:100%;justify-content:center;margin-top:4px}
 .login-err{color:var(--alta);font-size:12px;margin-top:10px;min-height:16px}
-.mitre-tag{display:inline-block;background:rgba(99,102,241,.15);color:#a5a8f5;font-size:10px;padding:2px 7px;border-radius:5px;font-weight:600;margin-top:2px}
 .user-bar{display:flex;align-items:center;gap:8px;margin-left:auto}
 </style>
 </head>
 <body>
 
-<!-- LOGIN GATE -->
 <div id="loginGate" class="login-wrap">
   <div class="login-box">
-    <h1><span class="dot"></span> SecuMonitor</h1>
+    <h1><span class="dot"></span> SecMonitor</h1>
     <p>Inicia sesión para continuar</p>
     <input id="loginEmail" type="email" placeholder="Correo electrónico" onkeydown="if(event.key==='Enter')doLogin()">
     <input id="loginPass" type="password" placeholder="Contraseña" onkeydown="if(event.key==='Enter')doLogin()">
@@ -138,7 +150,7 @@ footer{text-align:center;color:var(--mut);font-size:11px;margin-top:22px}
 
 <div class="hdr">
   <div class="brand">
-    <h1><span class="dot"></span> SecuMonitor</h1>
+    <h1><span class="dot"></span> SecMonitor</h1>
     <p>Monitoreo de seguridad y gestión de riesgos</p>
   </div>
   <div class="user-bar">
@@ -152,7 +164,6 @@ footer{text-align:center;color:var(--mut);font-size:11px;margin-top:22px}
   <button class="tab" id="tab-risks" onclick="setTab('risks')">🛡️ Gestión de Riesgos</button>
 </nav>
 
-<!-- ===== MONITOREO ===== -->
 <div id="view-monitor">
   <div class="ctrl" style="margin-bottom:14px">
     <select id="reportRange">
@@ -162,6 +173,7 @@ footer{text-align:center;color:var(--mut);font-size:11px;margin-top:22px}
     </select>
     <button class="sec" onclick="downloadReport()">📄 Informe monitoreo</button>
     <button class="sec" id="simBtn" onclick="simulateAttack()">⚡ Simular ataque</button>
+    <button class="critbtn" id="chainBtn" onclick="simulateChain()">🔗 Simular Kill Chain</button>
     <div class="ml">
       <button class="pri" id="refreshBtn" onclick="loadData()">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 12a9 9 0 11-3-6.7M21 4v6h-6"/></svg>
@@ -172,12 +184,12 @@ footer{text-align:center;color:var(--mut);font-size:11px;margin-top:22px}
 
   <div class="cards" id="summaryCards">
     <div class="card"><div class="lbl">Eventos</div><div class="sk" style="width:50%;margin-top:8px"></div><div class="bar"></div></div>
+    <div class="card ccrit"><div class="lbl">Kill Chain</div><div class="sk" style="width:30%;margin-top:8px"></div><div class="bar"></div></div>
     <div class="card ca"><div class="lbl">Alertas Altas</div><div class="sk" style="width:40%;margin-top:8px"></div><div class="bar"></div></div>
     <div class="card cm"><div class="lbl">Alertas Medias</div><div class="sk" style="width:40%;margin-top:8px"></div><div class="bar"></div></div>
     <div class="card cb"><div class="lbl">Alertas Bajas</div><div class="sk" style="width:40%;margin-top:8px"></div><div class="bar"></div></div>
   </div>
 
-  <!-- TENDENCIAS -->
   <div class="panel">
     <div class="ph">📈 Tendencias</div>
     <div class="chart-grid">
@@ -192,13 +204,11 @@ footer{text-align:center;color:var(--mut);font-size:11px;margin-top:22px}
     </div>
   </div>
 
-  <!-- Attack Map -->
   <div class="panel">
     <div class="ph">🌍 Mapa de Ataques</div>
     <div id="attackMap" style="height:320px;border-radius:10px;overflow:hidden"></div>
   </div>
 
-  <!-- IP Lookup -->
   <div class="panel">
     <div class="ph">🔍 Consulta de reputación de IP</div>
     <div class="ctrl">
@@ -221,7 +231,6 @@ footer{text-align:center;color:var(--mut);font-size:11px;margin-top:22px}
   </div>
 </div>
 
-<!-- ===== RIESGOS ===== -->
 <div id="view-risks" style="display:none">
   <div class="rhdr">
     <div>
@@ -257,7 +266,6 @@ footer{text-align:center;color:var(--mut);font-size:11px;margin-top:22px}
   </div>
 </div>
 
-<!-- ===== MODAL ===== -->
 <div class="ovl" id="riskModal" style="display:none" onclick="if(event.target===this)closeModal()">
   <div class="modal">
     <div class="mhdr">
@@ -288,7 +296,6 @@ footer{text-align:center;color:var(--mut);font-size:11px;margin-top:22px}
       </div>
       <div id="step2" style="display:none">
         <div class="fg"><label>Probabilidad *</label>
-          <div style="color:var(--mut);font-size:11px;margin-bottom:7px">¿Qué tan probable es que ocurra?</div>
           <div class="rating">
             <button class="rb" data-t="probability" onclick="setRating('probability',1)"><div class="rn">1</div><div class="rl">Muy baja</div></button>
             <button class="rb" data-t="probability" onclick="setRating('probability',2)"><div class="rn">2</div><div class="rl">Baja</div></button>
@@ -297,7 +304,6 @@ footer{text-align:center;color:var(--mut);font-size:11px;margin-top:22px}
             <button class="rb" data-t="probability" onclick="setRating('probability',5)"><div class="rn">5</div><div class="rl">Muy alta</div></button>
           </div></div>
         <div class="fg"><label>Impacto *</label>
-          <div style="color:var(--mut);font-size:11px;margin-bottom:7px">¿Qué tan grave sería si ocurre?</div>
           <div class="rating">
             <button class="rb" data-t="impact" onclick="setRating('impact',1)"><div class="rn">1</div><div class="rl">Insignif.</div></button>
             <button class="rb" data-t="impact" onclick="setRating('impact',2)"><div class="rn">2</div><div class="rl">Menor</div></button>
@@ -348,7 +354,9 @@ footer{text-align:center;color:var(--mut);font-size:11px;margin-top:22px}
   </div>
 </div>
 
-<footer>SecuMonitor — Actualización automática cada 15s</footer>
+<footer>SecMonitor — Actualización automática cada 15s</footer>
+
+</div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/10.7.1/firebase-app-compat.min.js"></script>
@@ -356,8 +364,7 @@ footer{text-align:center;color:var(--mut);font-size:11px;margin-top:22px}
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
-// ── FIREBASE AUTH — reemplaza con los valores de TU proyecto ────────────────
-// Firebase Console > Configuración del proyecto > Tus apps > Web app
+// ── FIREBASE AUTH — reemplaza con los valores de TU proyecto si aun no lo hiciste ──
 const firebaseConfig = {
   apiKey: "AIzaSyDaRpvJlIeQEMR_47Kx-ezQlZBYGr463pc",
   authDomain: "secmonitor-68e19.firebaseapp.com",
@@ -406,29 +413,6 @@ let alerts=[],events=[],risks=[],riskMap={};
 let hidden=false,step=1,editId=null,f={};
 let chartE=null,chartA=null,attackMap=null,markersLayer=null;
 
-function initMap(){
-  if(attackMap) return;
-  attackMap=L.map('attackMap',{zoomControl:true,attributionControl:false}).setView([20,10],2);
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:8,subdomains:'abcd'}).addTo(attackMap);
-  markersLayer=L.layerGroup().addTo(attackMap);
-}
-
-function plotAttackMap(al){
-  if(typeof L==='undefined') return;
-  initMap();
-  markersLayer.clearLayers();
-  const sevColor={alta:'#ef4444',media:'#f59e0b',baja:'#38bdf8'};
-  al.forEach(a=>{
-    if(!a.geo||!a.geo.lat||!a.geo.lon) return;
-    const c=sevColor[(a.severity||'baja').toLowerCase()]||'#38bdf8';
-    const m=L.circleMarker([a.geo.lat,a.geo.lon],{radius:7,color:c,fillColor:c,fillOpacity:.55,weight:1.5});
-    const abuseLine=a.abuse?('<br>AbuseIPDB: '+a.abuse.score+'%'):'';
-    m.bindPopup('<b>'+(a.sourceIp||'—')+'</b><br>'+(a.geo.city||'')+' '+(a.geo.country||'')+'<br>'+(a.rule||'')+abuseLine);
-    markersLayer.addLayer(m);
-  });
-}
-
-// ── TABS ──────────────────────────────────────────────────────────────────────
 function setTab(n){
   ['monitor','risks'].forEach(t=>{
     document.getElementById('view-'+t).style.display=t===n?'':'none';
@@ -437,12 +421,10 @@ function setTab(n){
   if(n==='risks')loadRisks();
 }
 
-// ── UTILS ─────────────────────────────────────────────────────────────────────
 function ago(iso){const s=Math.floor((Date.now()-new Date(iso))/1000);return s<60?s+'s':s<3600?Math.floor(s/60)+'m':s<86400?Math.floor(s/3600)+'h':Math.floor(s/86400)+'d';}
 function lvlOf(sc){return sc<=4?'bajo':sc<=9?'medio':sc<=14?'alto':'critico';}
 function cellBg(p,i){const s=p*i;return s<=4?'rgba(34,197,94,.25)':s<=9?'rgba(234,179,8,.25)':s<=14?'rgba(249,115,22,.25)':'rgba(239,68,68,.25)';}
 
-// ── CHARTS ────────────────────────────────────────────────────────────────────
 function initCharts(d) {
   const gc='rgba(31,41,64,0.8)',tc='#8b95ab';
   const baseOpts={
@@ -477,6 +459,7 @@ function initCharts(d) {
     data:{
       labels:d.alertsByDay.labels,
       datasets:[
+        {label:'Crítica',data:d.alertsByDay.critica||[],backgroundColor:'rgba(220,38,38,0.85)',borderRadius:3},
         {label:'Alta', data:d.alertsByDay.alta, backgroundColor:'rgba(239,68,68,0.78)', borderRadius:3},
         {label:'Media',data:d.alertsByDay.media,backgroundColor:'rgba(245,158,11,0.78)',borderRadius:3},
         {label:'Baja', data:d.alertsByDay.baja, backgroundColor:'rgba(56,189,248,0.78)', borderRadius:3},
@@ -494,12 +477,35 @@ function initCharts(d) {
   });
 }
 
-// ── MONITORING ────────────────────────────────────────────────────────────────
+function initMap(){
+  if(attackMap) return;
+  attackMap=L.map('attackMap',{zoomControl:true,attributionControl:false}).setView([20,10],2);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:8,subdomains:'abcd'}).addTo(attackMap);
+  markersLayer=L.layerGroup().addTo(attackMap);
+}
+
+function plotAttackMap(al){
+  if(typeof L==='undefined') return;
+  initMap();
+  markersLayer.clearLayers();
+  const sevColor={critica:'#dc2626',alta:'#ef4444',media:'#f59e0b',baja:'#38bdf8'};
+  al.forEach(a=>{
+    if(!a.geo||!a.geo.lat||!a.geo.lon) return;
+    const sev=(a.severity||'baja').toLowerCase();
+    const c=sevColor[sev]||'#38bdf8';
+    const m=L.circleMarker([a.geo.lat,a.geo.lon],{radius:sev==='critica'?9:7,color:c,fillColor:c,fillOpacity:.6,weight:1.5});
+    const abuseLine=a.abuse?('<br>AbuseIPDB: '+a.abuse.score+'%'):'';
+    m.bindPopup('<b>'+(a.sourceIp||'—')+'</b><br>'+(a.geo.city||'')+' '+(a.geo.country||'')+'<br>'+(a.rule||'')+abuseLine);
+    markersLayer.addLayer(m);
+  });
+}
+
 function renderSummary(ev,al){
-  const c={alta:0,media:0,baja:0};
+  const c={critica:0,alta:0,media:0,baja:0};
   al.forEach(a=>{const s=(a.severity||'baja').toLowerCase();if(c[s]!==undefined)c[s]++;});
   document.getElementById('summaryCards').innerHTML=`
     <div class="card"><div class="lbl">Eventos Totales</div><div class="val">${ev.length}</div><div class="bar"></div></div>
+    <div class="card ccrit"><div class="lbl">Kill Chain</div><div class="val">${c.critica}</div><div class="bar"></div></div>
     <div class="card ca"><div class="lbl">Alertas Altas</div><div class="val">${c.alta}</div><div class="bar"></div></div>
     <div class="card cm"><div class="lbl">Alertas Medias</div><div class="val">${c.media}</div><div class="bar"></div></div>
     <div class="card cb"><div class="lbl">Alertas Bajas</div><div class="val">${c.baja}</div><div class="bar"></div></div>`;
@@ -513,49 +519,25 @@ function abuseBadge(abuse){
   return `<span class="ab ${cls}" title="ISP: ${abuse.isp||'—'} | País: ${abuse.country||'—'} | Reportes: ${abuse.totalReports}">${sc}% ${tor}</span>`;
 }
 
-function renderIpResult(d,ip){
-  const sc=d.score,cls=sc<25?'ab-safe':sc<75?'ab-warn':'ab-danger';
-  document.getElementById('ipResult').innerHTML=`
-    <div class="ip-result">
-      <div class="ip-field"><div class="lf">IP</div><div class="lv mono">${ip}</div></div>
-      <div class="ip-field"><div class="lf">Abuse Score</div><div class="lv"><span class="ab ${cls}">${sc}%</span></div></div>
-      <div class="ip-field"><div class="lf">Reportes totales</div><div class="lv">${d.totalReports}</div></div>
-      <div class="ip-field"><div class="lf">País</div><div class="lv">${d.country||'—'}</div></div>
-      <div class="ip-field"><div class="lf">ISP</div><div class="lv" style="font-size:12px">${d.isp||'—'}</div></div>
-      <div class="ip-field"><div class="lf">Tipo de uso</div><div class="lv" style="font-size:12px">${d.usageType||'—'}</div></div>
-      <div class="ip-field"><div class="lf">Nodo TOR</div><div class="lv">${d.isTor?'🧅 Sí':'No'}</div></div>
-    </div>`;
-}
-
-async function checkIp(){
-  const ip=document.getElementById('ipInput').value.trim();
-  if(!ip){return;}
-  const el=document.getElementById('ipResult');
-  el.innerHTML='<div class="loading">Consultando AbuseIPDB...</div>';
-  try{
-    const h=await authHeaders();
-    const res=await fetch(`${API}/api/ip-check/${encodeURIComponent(ip)}`,{headers:h});
-    if(!res.ok){const e=await res.json();el.innerHTML=`<div class="err">${e.error}</div>`;return;}
-    const d=await res.json();
-    renderIpResult(d,ip);
-  }catch(e){el.innerHTML=`<div class="err">Error: ${e.message}</div>`;}
-}
-
 function renderAlerts(al){
   document.getElementById('alertsCt').textContent=al.length;
   const el=document.getElementById('alertsBox');
   if(hidden){el.innerHTML='<div class="empty">Vista limpiada — presiona Actualizar para recargar.</div>';return;}
   if(!al.length){el.innerHTML='<div class="empty">Sin alertas. Genera una simulación para ver datos.</div>';return;}
   el.innerHTML=`<table><thead><tr><th>Severidad</th><th>Regla</th><th>MITRE ATT&CK</th><th>Detalle</th><th>IP</th><th>AbuseIPDB</th><th>Cuándo</th></tr></thead>
-    <tbody>${al.map(a=>`<tr>
+    <tbody>${al.map(a=>{
+      const isChain=a.rule==='kill_chain';
+      const chainSeq=isChain&&a.chain?('<div class="chain-list">'+a.chain.map(s=>s.label).join(' → ')+'</div>'):'';
+      return `<tr class="${isChain?'chain-row':''}">
       <td><span class="badge ${(a.severity||'baja').toLowerCase()}">${a.severity||'—'}</span></td>
-      <td>${a.rule||'—'}</td>
-      <td>${a.mitre?`<span class="mitre-tag" title="${a.mitre.tactic}">${a.mitre.id}</span><div class="s12" style="color:var(--mut);margin-top:2px">${a.mitre.name}</div>`:'—'}</td>
-      <td>${a.message||'—'}</td>
+      <td>${isChain?'🔗 kill_chain':a.rule||'—'}</td>
+      <td>${a.mitre?`<span class="mitre-tag" title="${a.mitre.tactic||''}">${a.mitre.id}</span><div class="s12" style="color:var(--mut);margin-top:2px">${a.mitre.name||''}</div>`:'—'}</td>
+      <td>${a.message||'—'}${chainSeq}</td>
       <td class="mono" style="cursor:pointer;color:var(--acc)" onclick="document.getElementById('ipInput').value='${a.sourceIp||''}';checkIp()" title="Click para consultar esta IP">${a.sourceIp||'—'}</td>
       <td>${abuseBadge(a.abuse)}</td>
       <td class="mono">${ago(a.timestamp)}</td>
-    </tr>`).join('')}</tbody></table>`;
+    </tr>`;
+    }).join('')}</tbody></table>`;
 }
 
 function renderEvents(ev){
@@ -611,17 +593,60 @@ async function simulateAttack(){
     const res=await fetch(`${API}/api/events/simulate`,{method:'POST',headers:h});
     const data=await res.json();
     if(!res.ok) throw new Error(data.error||'Error en la simulación');
-    btn.textContent=`✓ ${data.alertsGenerated} alerta(s) generada(s)`;
+    btn.textContent=`✓ ${data.alertsGenerated} alerta(s)`;
     await loadData();
   }catch(e){
-    btn.textContent='Error';
-    alert('Error al simular: '+e.message);
+    btn.textContent='Error'; alert('Error al simular: '+e.message);
   }finally{
     setTimeout(()=>{btn.disabled=false;btn.textContent='⚡ Simular ataque';},2500);
   }
 }
 
-// ── RISKS ─────────────────────────────────────────────────────────────────────
+async function simulateChain(){
+  const btn=document.getElementById('chainBtn');
+  btn.disabled=true;btn.textContent='Encadenando...';
+  try{
+    const h=await authHeaders();
+    const res=await fetch(`${API}/api/events/simulate-chain`,{method:'POST',headers:{...h,'Content-Type':'application/json'},body:JSON.stringify({})});
+    const data=await res.json();
+    if(!res.ok) throw new Error(data.error||'Error en la simulación de kill chain');
+    btn.textContent=`🔗 Kill chain generada`;
+    await loadData();
+  }catch(e){
+    btn.textContent='Error'; alert('Error al simular kill chain: '+e.message);
+  }finally{
+    setTimeout(()=>{btn.disabled=false;btn.textContent='🔗 Simular Kill Chain';},2500);
+  }
+}
+
+function renderIpResult(d,ip){
+  const sc=d.score,cls=sc<25?'ab-safe':sc<75?'ab-warn':'ab-danger';
+  document.getElementById('ipResult').innerHTML=`
+    <div class="ip-result">
+      <div class="ip-field"><div class="lf">IP</div><div class="lv mono">${ip}</div></div>
+      <div class="ip-field"><div class="lf">Abuse Score</div><div class="lv"><span class="ab ${cls}">${sc}%</span></div></div>
+      <div class="ip-field"><div class="lf">Reportes totales</div><div class="lv">${d.totalReports}</div></div>
+      <div class="ip-field"><div class="lf">País</div><div class="lv">${d.country||'—'}</div></div>
+      <div class="ip-field"><div class="lf">ISP</div><div class="lv" style="font-size:12px">${d.isp||'—'}</div></div>
+      <div class="ip-field"><div class="lf">Tipo de uso</div><div class="lv" style="font-size:12px">${d.usageType||'—'}</div></div>
+      <div class="ip-field"><div class="lf">Nodo TOR</div><div class="lv">${d.isTor?'🧅 Sí':'No'}</div></div>
+    </div>`;
+}
+
+async function checkIp(){
+  const ip=document.getElementById('ipInput').value.trim();
+  if(!ip){return;}
+  const el=document.getElementById('ipResult');
+  el.innerHTML='<div class="loading">Consultando AbuseIPDB...</div>';
+  try{
+    const h=await authHeaders();
+    const res=await fetch(`${API}/api/ip-check/${encodeURIComponent(ip)}`,{headers:h});
+    if(!res.ok){const e=await res.json();el.innerHTML=`<div class="err">${e.error}</div>`;return;}
+    const d=await res.json();
+    renderIpResult(d,ip);
+  }catch(e){el.innerHTML=`<div class="err">Error: ${e.message}</div>`;}
+}
+
 function renderHeatMap(rs){
   const grid=document.getElementById('hmGrid'),cells={};
   grid.innerHTML='';
@@ -672,7 +697,6 @@ async function deleteRisk(id){
   await fetch(`${API}/api/risks/${id}`,{method:'DELETE',headers:h});loadRisks();
 }
 
-// ── MODAL ─────────────────────────────────────────────────────────────────────
 function openModal(idOrNull=null){
   const risk=typeof idOrNull==='string'?riskMap[idOrNull]:null;
   editId=risk?risk.id:null;
@@ -743,6 +767,5 @@ async function saveRisk(){
 }
 </script>
 
-</div>
 </body>
 </html>
