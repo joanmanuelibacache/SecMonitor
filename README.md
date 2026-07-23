@@ -1,6 +1,6 @@
 # 🛡️ SecMonitor — Sistema SIEM de Monitoreo y Gestión de Riesgos
 
-SecMonitor es un sistema **SIEM (Security Information and Event Management)** desarrollado desde cero como proyecto personal, orientado a la detección de patrones de ataque, gestión de riesgos de seguridad y generación automática de informes. Desplegado en la nube con Firebase y Render.
+SecMonitor es un sistema **SIEM (Security Information and Event Management)** desarrollado desde cero como proyecto personal, orientado a la detección de patrones de ataque, correlación de incidentes, gestión de riesgos y generación automática de informes (incluyendo mapeo de cumplimiento ISO 27001). Desplegado en la nube con Firebase y Render.
 
 ---
 
@@ -16,20 +16,24 @@ SecMonitor es un sistema **SIEM (Security Information and Event Management)** de
 
 ### 🔐 Autenticación
 - Acceso protegido con **Firebase Authentication** (email/contraseña)
-- Todas las rutas de la API validan el token de sesión antes de responder — sin login, no hay acceso a datos
-- Botón de simulación de ataques integrado directamente en el dashboard, sin necesidad de comandos externos
+- Todas las rutas de la API validan el token de sesión antes de responder
+- Menús de acción agrupados de forma intuitiva (Descargar / Simular) en vez de botones sueltos
 
 ### 🖥️ Monitoreo en tiempo real
 - Detección de patrones de ataque mediante motor de reglas personalizado
-- Alertas clasificadas por severidad: **Alta / Media / Baja**
+- Alertas clasificadas por severidad: **Crítica / Alta / Media / Baja**
 - Actualización automática del dashboard cada 15 segundos
-- Gráficos de tendencias: eventos por hora (últimas 24h) y alertas por día (últimos 7 días)
+- Gráficos de tendencias: eventos por hora y alertas por día por severidad
 - Botón para limpiar la vista de alertas sin borrar los datos
-- Botón de **simulación de ataques** con un clic para generar tráfico de prueba
+- Simulación de ataques con un clic (ataque simple o **secuencia completa de kill chain**)
+
+### 🔗 Correlación multi-evento (Kill Chain Detection)
+- Motor de correlación que rastrea el comportamiento de cada IP en una ventana de 30 minutos
+- Si una misma IP encadena 2 o más etapas de ataque (ej: **reconocimiento → acceso a credenciales → acceso inicial**), se genera un **incidente crítico** independiente de las alertas individuales
+- Detecta específicamente el patrón más peligroso: login exitoso *después* de un intento de fuerza bruta desde la misma IP (fuerte indicio de cuenta comprometida)
+- Las alertas de kill chain muestran la secuencia completa de etapas detectadas
 
 ### 🔍 Reglas de detección + MITRE ATT&CK
-
-Cada regla está mapeada a su técnica correspondiente del framework **MITRE ATT&CK**, el estándar de la industria para clasificar amenazas:
 
 | Regla | Condición | Severidad | Técnica MITRE |
 |---|---|---|---|
@@ -37,26 +41,25 @@ Cada regla está mapeada a su técnica correspondiente del framework **MITRE ATT
 | Escaneo de puertos | Conexiones a >10 puertos distintos en 5 min | Media | T1046 — Network Service Discovery |
 | Acceso fuera de horario | Login exitoso entre 00:00 y 05:00 | Baja | T1078 — Valid Accounts |
 | Múltiples países | Mismo usuario desde >2 países en la misma ventana | Media | T1078.004 — Valid Accounts: Cloud Accounts |
+| **Kill Chain** | 2+ etapas de ataque correlacionadas desde la misma IP | **Crítica** | Múltiples técnicas combinadas |
 
 ### 🌐 Threat Intelligence y geolocalización
-- Integración con **AbuseIPDB**: cada IP detectada se enriquece con su score de reputación, ISP, país y si es nodo TOR
-- Panel de **consulta manual de IPs** — busca cualquier IP directamente desde el dashboard
+- Integración con **AbuseIPDB**: score de reputación, ISP, país y detección de nodos TOR
+- Panel de **consulta manual de IPs** desde el dashboard
 - **Geolocalización automática** (ip-api.com) de cada IP atacante
-- **Mapa de ataques interactivo** (Leaflet + tiles oscuros) con marcadores coloreados por severidad y popups con el detalle de cada alerta
+- **Mapa de ataques interactivo** (Leaflet + tiles oscuros) con marcadores por severidad, incluyendo un marcador especial más grande para incidentes de kill chain
 
 ### 🛡️ Gestión de Riesgos
-- Matriz de riesgos con proceso completo de 4 fases:
-  1. **Identificación** — nombre, descripción, categoría, activos afectados
-  2. **Análisis** — puntuación de probabilidad × impacto con previsualización en tiempo real
-  3. **Mitigación** — estrategia, responsable, fecha límite y estado
-  4. **Riesgo Residual** — cálculo del riesgo remanente tras la mitigación y % de reducción
+- Matriz de riesgos con 4 fases: **Identificación → Análisis → Mitigación → Riesgo Residual**
 - Mapa de calor interactivo (5×5) con posicionamiento visual de cada riesgo
 - Edición y eliminación de riesgos registrados
 
-### 📄 Informes PDF profesionales
-- Plantilla visual con portada, encabezados y pies de página estandarizados
-- **Informe de monitoreo** — resumen de eventos, top IPs sospechosas (con datos de AbuseIPDB), alertas altas con su técnica MITRE, por período (24h / 7d / 30d)
-- **Informe de gestión de riesgos** — portada, resumen ejecutivo, mapa de calor y detalle completo de cada riesgo con sus 4 fases
+### 📄 Informes y exportación de datos
+- Plantilla PDF profesional con portada, encabezados y pies de página estandarizados
+- **Informe de monitoreo** — eventos, top IPs sospechosas, alertas altas con técnica MITRE, e incidentes de kill chain, por período (24h / 7d / 30d)
+- **Informe de gestión de riesgos** — resumen ejecutivo, mapa de calor y detalle de cada riesgo con sus 4 fases
+- **Informe de cumplimiento ISO/IEC 27001:2022** — mapeo de 12 controles del Anexo A relevantes a SecMonitor, clasificados en evidencia automática, proceso manual, o fuera de alcance (con disclaimer claro de que no constituye una certificación)
+- **Exportación a CSV** de eventos y alertas, con codificación compatible con Excel
 
 ---
 
@@ -69,11 +72,13 @@ Cada regla está mapeada a su técnica correspondiente del framework **MITRE ATT
          ↓         ↓          ↓
  [Motor reglas] [AbuseIPDB] [GeoIP]
          ↓         ↓          ↓
+   [Correlación Kill Chain (30 min)]
+              ↓
        [Firestore (Firebase)]
               ↓
    [Firebase Auth — login requerido]
               ↓
-   [Dashboard Web] → [Mapa de ataques] → [Informes PDF]
+[Dashboard Web] → [Mapa de ataques] → [Informes PDF / CSV / ISO 27001]
 ```
 
 ---
@@ -93,6 +98,8 @@ Cada regla está mapeada a su técnica correspondiente del framework **MITRE ATT
 | Geolocalización | ip-api.com |
 | Generación PDF | PDFKit |
 | Clasificación de amenazas | MITRE ATT&CK Framework |
+| Marco de cumplimiento | ISO/IEC 27001:2022 (Anexo A, mapeo propio) |
+| Notificaciones | Telegram Bot API (opcional) |
 | Simulación de eventos | Generador propio con motor de reglas |
 
 ---
@@ -123,30 +130,29 @@ npm install
 # 4. Configurar variables de entorno
 # Crea un archivo .env en la raiz con:
 #   ABUSEIPDB_KEY=tu_clave_aqui
+#   TELEGRAM_BOT_TOKEN=tu_token_aqui (opcional)
+#   TELEGRAM_CHAT_ID=tu_chat_id_aqui (opcional)
 
 # 5. Configurar Firebase Authentication
 # En Firebase Console > Authentication > Sign-in method: habilita Email/Password
 # En Authentication > Users: crea tu usuario de acceso al dashboard
 # En public/index.html: reemplaza el objeto firebaseConfig con el de tu proyecto
-# (Configuracion del proyecto > Tus apps > Web app)
 
 # 6. Iniciar el servidor
 node server.js
 ```
 
-Abre [http://localhost:3000](http://localhost:3000), inicia sesión con el usuario creado en el paso 5, y usa el botón **"⚡ Simular ataque"** del dashboard para generar datos de prueba.
+Abre [http://localhost:3000](http://localhost:3000), inicia sesión, y usa el menú **"🧪 Simular"** para generar datos de prueba (ataque simple o secuencia completa de kill chain).
 
 ---
 
 ## 🧪 Tests
 
-El proyecto incluye tests automatizados para verificar el motor de reglas de detección:
-
 ```bash
 node test.js
 ```
 
-Verifica 6 casos: generación de eventos, detección correcta de cada patrón de ataque y ausencia de falsos positivos.
+Verifica la generación de eventos y la detección correcta de cada patrón de ataque, sin falsos positivos.
 
 ---
 
@@ -162,11 +168,11 @@ Verifica 6 casos: generación de eventos, detección correcta de cada patrón de
 - [x] **Autenticación** con Firebase Auth
 - [x] **Mapeo MITRE ATT&CK** por regla de detección
 - [x] **Geolocalización de IPs** con mapa de ataques interactivo
-- [ ] Correlación multi-evento (kill chain detection)
-- [ ] Notificaciones en tiempo real vía bot de Telegram
-- [ ] Exportación a CSV
+- [x] **Correlación multi-evento** (kill chain detection)
+- [x] **Exportación a CSV** de eventos y alertas
+- [x] **Informe de cumplimiento ISO/IEC 27001:2022**
+- [ ] Notificaciones en tiempo real vía bot de Telegram (implementado, pendiente de activar en producción)
 - [ ] Migración a logs reales desde entorno de laboratorio (VM aislada)
-- [ ] Reportes de cumplimiento (ISO 27001 / SOC 2)
 
 ---
 
@@ -178,4 +184,4 @@ Técnico en Ciberseguridad | Estudiante de Ingeniería en Informática
 
 ---
 
-> ⚠️ Este proyecto es de uso educativo y para entorno de laboratorio controlado. No utilizar en sistemas sin autorización explícita.
+> ⚠️ Este proyecto es de uso educativo y para entorno de laboratorio controlado. No utilizar en sistemas sin autorización explícita. El informe de cumplimiento ISO 27001 documenta soporte técnico de controles puntuales y no constituye una certificación ni un Sistema de Gestión de Seguridad de la Información (SGSI) completo.

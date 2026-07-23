@@ -246,6 +246,22 @@ async function processEvent(evt) {
   return alerts;
 }
 
+// ── MAPEO DE CUMPLIMIENTO ISO/IEC 27001:2022 ─────────────────────────────────
+const CONTROLS_MAP = [
+  { id: 'A.5.7',  theme: 'Organizacional',    name: 'Inteligencia de amenazas',            support: 'Enriquecimiento de alertas con AbuseIPDB (reputacion de IP en tiempo real)',    evidence: 'Automatica' },
+  { id: 'A.5.9',  theme: 'Organizacional',    name: 'Inventario de activos',                support: 'Registro de activos afectados en cada riesgo de la matriz de gestion',          evidence: 'Manual' },
+  { id: 'A.5.23', theme: 'Organizacional',    name: 'Seguridad en servicios cloud',         support: 'Acceso protegido con Firebase Authentication en toda la plataforma',            evidence: 'Automatica' },
+  { id: 'A.5.24', theme: 'Organizacional',    name: 'Planificacion de incidentes',          support: 'Motor de reglas + correlacion multi-evento (kill chain) clasifican incidentes', evidence: 'Automatica' },
+  { id: 'A.5.25', theme: 'Organizacional',    name: 'Evaluacion de eventos',                support: 'Clasificacion automatica por severidad (baja, media, alta, critica)',           evidence: 'Automatica' },
+  { id: 'A.5.26', theme: 'Organizacional',    name: 'Respuesta a incidentes',               support: 'Notificaciones en tiempo real (Telegram) para alertas de severidad alta',       evidence: 'Manual' },
+  { id: 'A.5.31', theme: 'Organizacional',    name: 'Requisitos legales y contractuales',   support: 'Requiere revision legal externa, fuera del alcance de la herramienta',          evidence: 'No cubierto' },
+  { id: '6.1.2',  theme: 'Clausula principal', name: 'Evaluacion de riesgos',               support: 'Matriz de riesgos: identificacion, analisis, mitigacion y riesgo residual',      evidence: 'Automatica' },
+  { id: 'A.8.7',  theme: 'Tecnologico',       name: 'Proteccion contra malware',            support: 'Fuera de alcance actual, no se realiza analisis de malware',                    evidence: 'No cubierto' },
+  { id: 'A.8.9',  theme: 'Tecnologico',       name: 'Gestion de configuracion',             support: 'Codigo versionado en Git; credenciales gestionadas via variables de entorno',   evidence: 'Manual' },
+  { id: 'A.8.15', theme: 'Tecnologico',       name: 'Registro (logging)',                   support: 'Persistencia de todos los eventos y alertas en Firestore con timestamp',        evidence: 'Automatica' },
+  { id: 'A.8.16', theme: 'Tecnologico',       name: 'Actividades de monitoreo',             support: 'Dashboard en tiempo real, mapa de ataques y graficos de tendencias',            evidence: 'Automatica' }
+];
+
 // ── PDF TEMPLATE ──────────────────────────────────────────────────────────────
 const C = {
   bg: '#0d1b2a', navy: '#1b2838', accent: '#00b4d8', accent2: '#3b82f6',
@@ -667,6 +683,68 @@ app.get('/api/reports/risks', async function(req, res) {
     pageHeader(doc, 'Detalle de Riesgos');
     sectionTitle(doc, 'Detalle de Riesgos por Fase');
     risks.forEach(function(r, idx) { riskBlock(doc, r, idx, pg, 'Detalle de Riesgos'); });
+    pageFooter(doc, pg.n);
+    doc.end();
+  } catch (e) { console.error(e); res.status(500).json({ error: e.message }); }
+});
+
+// ── PDF: CUMPLIMIENTO ISO 27001 ───────────────────────────────────────────────
+app.get('/api/reports/compliance', async function(req, res) {
+  try {
+    const [rSnap, aSnap, eSnap] = await Promise.all([
+      risksCol.get(),
+      alertsCol.orderBy('timestamp', 'desc').limit(500).get(),
+      eventsCol.orderBy('timestamp', 'desc').limit(500).get()
+    ]);
+    const risks  = rSnap.docs.map(function(d) { return d.data(); });
+    const alerts = aSnap.docs.map(function(d) { return d.data(); });
+    const events = eSnap.docs.map(function(d) { return d.data(); });
+    const killChains = alerts.filter(function(a) { return a.rule === 'kill_chain'; }).length;
+
+    const auto   = CONTROLS_MAP.filter(function(c) { return c.evidence === 'Automatica'; }).length;
+    const manual = CONTROLS_MAP.filter(function(c) { return c.evidence === 'Manual'; }).length;
+    const gap    = CONTROLS_MAP.filter(function(c) { return c.evidence === 'No cubierto'; }).length;
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'attachment; filename="secmonitor-iso27001-' + new Date().toISOString().slice(0, 10) + '.pdf"');
+    const doc = new PDF({ margin: 0, size: 'A4' });
+    doc.pipe(res);
+    const pg = { n: 0 };
+
+    cover(doc, 'Informe de Cumplimiento ISO/IEC 27001:2022', 'Mapeo de controles tecnicos del Anexo A', 'Generado el ' + new Date().toLocaleString('es-CL'));
+
+    doc.addPage(); pg.n++;
+    pageHeader(doc, 'Cumplimiento ISO 27001');
+    sectionTitle(doc, 'Alcance y Limitaciones');
+    doc.fontSize(9).fillColor(C.muted).font('Helvetica')
+      .text('Este informe documenta que controles tecnicos del Anexo A de ISO/IEC 27001:2022 son soportados, total o parcialmente, por las funcionalidades de SecMonitor. No constituye una certificacion ni implica el cumplimiento de un Sistema de Gestion de Seguridad de la Informacion (SGSI) completo, el cual requiere adicionalmente politicas organizacionales, capacitacion del personal, controles fisicos y revision de la direccion, entre otros elementos fuera del alcance de esta herramienta.',
+        28, doc.y, { width: PW(doc) - 56, align: 'justify' });
+    doc.moveDown(1.2);
+
+    sectionTitle(doc, 'Resumen de Cobertura');
+    statBoxes(doc, [
+      { label: 'Controles Mapeados', value: CONTROLS_MAP.length, color: C.accent2 },
+      { label: 'Evidencia Automatica', value: auto,   color: C.ok    },
+      { label: 'Proceso Manual',       value: manual, color: C.media },
+      { label: 'Sin Cobertura',        value: gap,    color: C.alta  }
+    ]);
+
+    sectionTitle(doc, 'Evidencia Operativa Actual del Sistema');
+    statBoxes(doc, [
+      { label: 'Eventos Registrados',   value: events.length, color: C.accent2 },
+      { label: 'Alertas Generadas',     value: alerts.length, color: C.purple  },
+      { label: 'Incidentes Kill Chain', value: killChains,    color: C.critica },
+      { label: 'Riesgos en Matriz',     value: risks.length,  color: C.ok      }
+    ]);
+
+    if (doc.y > PH(doc) - 150) { pageFooter(doc, pg.n); doc.addPage(); pg.n++; pageHeader(doc, 'Cumplimiento ISO 27001'); }
+    sectionTitle(doc, 'Matriz de Controles');
+    drawTable(doc, ['ID', 'Control', 'Soporte de SecMonitor', 'Evidencia'],
+      CONTROLS_MAP.map(function(c) { return [c.id, c.name, c.support, c.evidence]; }),
+      [45, 130, 255, 109], pg, 'Cumplimiento ISO 27001');
+
+    doc.fontSize(8).fillColor(C.muted).text('Evidencia Automatica: generada por el sistema sin intervencion manual.  Manual: requiere accion o proceso del responsable.  No cubierto: fuera del alcance tecnico actual.', 28, doc.y, { width: PW(doc) - 56 });
+
     pageFooter(doc, pg.n);
     doc.end();
   } catch (e) { console.error(e); res.status(500).json({ error: e.message }); }
